@@ -182,6 +182,6 @@ MIT — see `LICENSE`.
 
 ## Author
 
-Julio Suárez ([@juliosuas](https://github.com/juliosuas))
+Julio Suástegui ([@juliosuas](https://github.com/juliosuas))
 
 Built to stop debugging local LLM weirdness with `print()` statements.
