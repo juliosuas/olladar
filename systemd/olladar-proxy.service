@@ -6,13 +6,22 @@ After=network-online.target
 [Service]
 Type=simple
 # OLLADAR_NODE is set by install.sh to the absolute node binary path (requires Node 22.5+).
-# Falls back to `node` in PATH if unset.
 Environment="OLLADAR_NODE=node"
-ExecStart=/bin/sh -c '"$OLLADAR_NODE" --experimental-sqlite %h/.local/bin/olladar-proxy.mjs'
+ExecStart=/bin/sh -c '"$OLLADAR_NODE" %h/.local/bin/olladar-proxy.mjs'
 Restart=on-failure
 RestartSec=2
 StandardOutput=journal
 StandardError=journal
+
+# Minimal user-service-compatible hardening. Directives that require capability
+# dropping (SystemCallFilter, RestrictAddressFamilies, MemoryDenyWriteExecute,
+# LockPersonality, RestrictNamespaces) are incompatible with unprivileged
+# --user services on this system and cause Failed-to-drop-capabilities.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/olladar
 
 [Install]
 WantedBy=default.target

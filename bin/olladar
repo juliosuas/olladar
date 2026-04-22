@@ -37,12 +37,17 @@ print(json.dumps(rows, indent=2, default=str))
 "; }
 
 parse_since() {
-  case "$1" in
-    *h) echo $(( ${1%h} * 3600000 )) ;;
-    *d) echo $(( ${1%d} * 86400000 )) ;;
-    *m) echo $(( ${1%m} * 60000 )) ;;
-    *) echo 86400000 ;;
-  esac
+  local spec="$1"
+  if [[ "$spec" =~ ^([0-9]+)h$ ]]; then
+    echo $(( ${BASH_REMATCH[1]} * 3600000 ))
+  elif [[ "$spec" =~ ^([0-9]+)d$ ]]; then
+    echo $(( ${BASH_REMATCH[1]} * 86400000 ))
+  elif [[ "$spec" =~ ^([0-9]+)m$ ]]; then
+    echo $(( ${BASH_REMATCH[1]} * 60000 ))
+  else
+    echo "error: --since must be integer h|d|m (e.g. 24h, 7d, 30m); got: $spec" >&2
+    exit 1
+  fi
 }
 
 cmd="${1:-}"; shift || true
@@ -60,7 +65,7 @@ rows = db.execute("""
 print(f"{'timestamp':<20} {'model':<25} {'tools':>5} {'tool?':>5} {'ttft':>8} {'total':>8} {'in/out':>12} {'status':>6}")
 for r in rows:
     ts = datetime.datetime.fromtimestamp(r[1]/1000).strftime('%m-%d %H:%M:%S')
-    print(f"{ts:<20} {str(r[2])[:25]:<25} {r[3]:>5} {r[4]:>5} {(str(round(r[5],0))+'ms' if r[5] else '-'):>8} {(str(round(r[6],0))+'ms' if r[6] else '-'):>8} {str(r[7] or '-')+'/'+str(r[8] or '-'):>12} {r[9] or '-':>6}")
+    print(f"{ts:<20} {str(r[2])[:25]:<25} {(r[3] or 0):>5} {(r[4] or 0):>5} {(str(round(r[5],0))+'ms' if r[5] else '-'):>8} {(str(round(r[6],0))+'ms' if r[6] else '-'):>8} {str(r[7] or '-')+'/'+str(r[8] or '-'):>12} {r[9] or '-':>6}")
 PY
     ;;
   slow)
@@ -113,13 +118,13 @@ print(f"=== olladar stats (last {label}) ===")
 print(f"Total calls: {total}")
 models = db.execute("""SELECT model_served, COUNT(*) AS n FROM calls WHERE ts>=? GROUP BY model_served ORDER BY n DESC""", (cutoff,)).fetchall()
 for model, n in models:
-    ttfts = [r[0] for r in db.execute("SELECT ttft_ms FROM calls WHERE model_served IS ? AND ts>=? AND ttft_ms IS NOT NULL ORDER BY ttft_ms", (model, cutoff))]
-    totals = [r[0] for r in db.execute("SELECT total_ms FROM calls WHERE model_served IS ? AND ts>=? AND total_ms IS NOT NULL ORDER BY total_ms", (model, cutoff))]
-    row = db.execute("SELECT AVG(prompt_tokens), AVG(completion_tokens) FROM calls WHERE model_served IS ? AND ts>=?", (model, cutoff)).fetchone()
+    ttfts = [r[0] for r in db.execute("SELECT ttft_ms FROM calls WHERE (model_served = ? OR (? IS NULL AND model_served IS NULL)) AND ts>=? AND ttft_ms IS NOT NULL ORDER BY ttft_ms", (model, model, cutoff))]
+    totals = [r[0] for r in db.execute("SELECT total_ms FROM calls WHERE (model_served = ? OR (? IS NULL AND model_served IS NULL)) AND ts>=? AND total_ms IS NOT NULL ORDER BY total_ms", (model, model, cutoff))]
+    row = db.execute("SELECT AVG(prompt_tokens), AVG(completion_tokens) FROM calls WHERE (model_served = ? OR (? IS NULL AND model_served IS NULL)) AND ts>=?", (model, model, cutoff)).fetchone()
     avg_prompt = row[0] or 0; avg_comp = row[1] or 0
     p50_ttft = ttfts[len(ttfts)//2] if ttfts else 0
     p50_total = totals[len(totals)//2] if totals else 0
-    p95_total = totals[int(len(totals)*0.95)] if totals else 0
+    p95_total = totals[int(len(totals)*0.95)] if len(totals) >= 20 else (totals[-1] if totals else 0)
     print(f"  {(model or '(null)'):<30} n={n:<4} p50_ttft={p50_ttft:>5.0f}ms  p50_total={p50_total:>6.0f}ms  p95_total={p95_total:>6.0f}ms  avg_in={avg_prompt:>4.0f}  avg_out={avg_comp:>4.0f}")
 
 tools_total = db.execute("SELECT COUNT(*) FROM calls WHERE had_tools=1 AND ts>=?", (cutoff,)).fetchone()[0]
@@ -189,8 +194,8 @@ GREEN="\033[32m"; DIM="\033[2m"; RED="\033[31m"; CYAN="\033[36m"; RESET="\033[0m
 print(f"{BOLD}watching {db_path} — Ctrl-C to stop{RESET}", file=sys.stderr)
 print(f"{'time':<10} {'model':<22} {'had_t':>5} {'tool':>5} {'ttft':>7} {'total':>8} {'in/out':>10} {'tok/s':>7} {'st':>3}", file=sys.stderr)
 try:
+    db = sqlite3.connect(db_path)
     while True:
-        db = sqlite3.connect(db_path)
         rows = db.execute("""
             SELECT ts, model_served, had_tools, tool_call_emitted, ttft_ms, total_ms,
                    prompt_tokens, completion_tokens, status_code, error
@@ -209,14 +214,13 @@ try:
                 tps = f"{CYAN}{tps_v:.0f}{RESET}"
             print(f"{ts:<10} {model:<22} {r[2]:>5} {t_col}{r[3]:>5}{RESET} {ttft:>7} {total:>8} {inout:>10} {tps:>14} {s_col}{r[8] or '-':>3}{RESET}")
             last_ts = r[0]
-        db.close()
         time.sleep(1)
 except KeyboardInterrupt:
     print(file=sys.stderr)
 PY
     ;;
   stream)
-    exec /home/ludwig/.local/bin/olladar-stream "$@"
+    exec olladar-stream "$@"
     ;;
   ""|-h|--help|help) usage ;;
   *) echo "unknown: $cmd"; usage; exit 1 ;;

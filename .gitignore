@@ -2,7 +2,6 @@
 *.sqlite
 *.sqlite-*
 logs/
-results/
 .cache/
 
 # editors / OS
@@ -20,3 +19,6 @@ venv/
 # node (if ever added)
 node_modules/
 .npmrc
+
+# user-generated results (the shipped ones under eval/results/ are tracked)
+/results/

@@ -1,5 +1,7 @@
 # olladar
 
+![license](https://img.shields.io/badge/license-MIT-blue) ![node](https://img.shields.io/badge/node-%E2%89%A522.5-brightgreen) ![ollama](https://img.shields.io/badge/ollama-%E2%89%A50.5-black) ![status](https://img.shields.io/badge/status-v0.1.0-orange)
+
 > **ollama + radar.** Observability, tool-use acceleration, and eval harness for local LLMs running on ollama.
 
 A transparent proxy that sits between your ollama-compatible client (OpenClaw, Open WebUI, your own agent, etc.) and the ollama server. It logs every call to SQLite, surfaces latency and tool-use metrics, and applies a targeted fix for a well-known failure mode where reasoning models silently fail to emit `tool_calls` — turning 7 s tool-use decisions into 1 s ones with zero loss of quality.
@@ -46,6 +48,8 @@ No calls in last 1h
 
 Then point your ollama client at `http://127.0.0.1:11435` instead of `:11434`.
 
+> **Privacy note.** olladar stores full prompt bodies in the `traces` table of its SQLite log. If you routinely paste secrets, API keys, or sensitive data into LLM prompts, know that those prompts persist on disk at `~/.local/share/olladar/logs.sqlite`. See [docs/MANUAL.md#sqlite-schema](docs/MANUAL.md#sqlite-schema) for how to opt out or purge the log.
+
 ## Quick usage
 
 ```bash
@@ -86,6 +90,23 @@ If both are true, olladar sets `think: false` before forwarding. qwen3 interpret
 | Overall eval pass rate | 35 % | **70 %** |
 
 For non-tool requests, olladar passes the body through unchanged. If your client explicitly sets `think` (to either `true` or `false`), olladar respects that.
+
+### Reproduce the numbers
+
+The raw eval runs are shipped in the repo:
+
+- `eval/results/qwen3_32b-baseline.json` — same 20 cases, `think` unset, reasoning on
+- `eval/results/qwen3_32b-with-olladar.json` — same 20 cases, routed through olladar's proxy
+
+Re-run on your machine:
+
+```bash
+# Baseline: hit ollama directly
+python3 eval/run.py --model qwen3:32b --endpoint http://127.0.0.1:11434
+
+# With olladar
+python3 eval/run.py --model qwen3:32b --endpoint http://127.0.0.1:11435
+```
 
 ## Architecture
 

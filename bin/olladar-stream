@@ -95,23 +95,23 @@ def main():
             # streaming deltas: message.content (or thinking), then final chunk has metrics
             content = msg.get("content") or ""
             thinking = msg.get("thinking") or ""
-            if thinking:
+            if thinking and isinstance(thinking, str):
                 if not in_thinking:
                     sys.stdout.write(f"{DIM}<think>{RESET}")
                     in_thinking = True
                 sys.stdout.write(f"{DIM}{thinking}{RESET}")
                 sys.stdout.flush()
                 # rough token estimate (~4 chars/token)
-                total_tok += max(1, len(thinking) // 4)
+                total_tok += max(1, len(thinking) // 3)  # ~3 chars/token (qwen3 tokenizer)
                 if t_first_tok is None:
                     t_first_tok = time.time()
-            if content:
+            if content and isinstance(content, str):
                 if in_thinking:
                     sys.stdout.write(f"{DIM}</think>{RESET}\n")
                     in_thinking = False
                 sys.stdout.write(content)
                 sys.stdout.flush()
-                total_tok += max(1, len(content) // 4)
+                total_tok += max(1, len(content) // 3)  # ~3 chars/token (qwen3 tokenizer)
                 if t_first_tok is None:
                     t_first_tok = time.time()
             if msg.get("tool_calls"):

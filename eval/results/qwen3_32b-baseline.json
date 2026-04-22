@@ -1,0 +1,260 @@
+{
+  "model": "qwen3:32b",
+  "endpoint": "http://127.0.0.1:11435",
+  "timestamp": "2026-04-22T0351",
+  "total_wall_sec": 140.0170567035675,
+  "overall": {
+    "passed": 7,
+    "n": 20,
+    "rate": 0.35
+  },
+  "by_kind": {
+    "tool_use": {
+      "n": 8,
+      "passed": 3,
+      "wall": 57539.57986831665
+    },
+    "synthesis": {
+      "n": 5,
+      "passed": 1,
+      "wall": 38765.28072357178
+    },
+    "coding": {
+      "n": 3,
+      "passed": 0,
+      "wall": 24237.5967502594
+    },
+    "long_ctx": {
+      "n": 2,
+      "passed": 2,
+      "wall": 8415.53258895874
+    },
+    "whatsapp": {
+      "n": 2,
+      "passed": 1,
+      "wall": 11058.369398117065
+    }
+  },
+  "cases": [
+    {
+      "case_id": "tu-browse-hn",
+      "kind": "tool_use",
+      "passed": true,
+      "notes": [
+        "tool=browser_open args_ok=True"
+      ],
+      "wall_ms": 3466.7859077453613,
+      "ttft_ms": 121.976343,
+      "eval_count": 124
+    },
+    {
+      "case_id": "tu-list-procs",
+      "kind": "tool_use",
+      "passed": false,
+      "notes": [
+        "no tool_call emitted"
+      ],
+      "wall_ms": 8171.046733856201,
+      "ttft_ms": 39.41326,
+      "eval_count": 300
+    },
+    {
+      "case_id": "tu-public-ip",
+      "kind": "tool_use",
+      "passed": false,
+      "notes": [
+        "no tool_call emitted"
+      ],
+      "wall_ms": 8097.248792648315,
+      "ttft_ms": 47.556141,
+      "eval_count": 300
+    },
+    {
+      "case_id": "tu-fetch-docs",
+      "kind": "tool_use",
+      "passed": true,
+      "notes": [
+        "tool=web_fetch args_ok=True"
+      ],
+      "wall_ms": 6610.93282699585,
+      "ttft_ms": 78.296502,
+      "eval_count": 243
+    },
+    {
+      "case_id": "tu-simple-answer",
+      "kind": "tool_use",
+      "passed": true,
+      "notes": [
+        "tool=answer args_ok=True"
+      ],
+      "wall_ms": 6705.875635147095,
+      "ttft_ms": 76.978932,
+      "eval_count": 247
+    },
+    {
+      "case_id": "tu-disk-usage",
+      "kind": "tool_use",
+      "passed": false,
+      "notes": [
+        "no tool_call emitted"
+      ],
+      "wall_ms": 8099.8992919921875,
+      "ttft_ms": 41.275628,
+      "eval_count": 300
+    },
+    {
+      "case_id": "tu-github-trending",
+      "kind": "tool_use",
+      "passed": false,
+      "notes": [
+        "no tool_call emitted"
+      ],
+      "wall_ms": 8162.69588470459,
+      "ttft_ms": 40.259323,
+      "eval_count": 300
+    },
+    {
+      "case_id": "tu-weather",
+      "kind": "tool_use",
+      "passed": false,
+      "notes": [
+        "no tool_call emitted"
+      ],
+      "wall_ms": 8225.09479522705,
+      "ttft_ms": 76.956207,
+      "eval_count": 300
+    },
+    {
+      "case_id": "syn-explain-rag",
+      "kind": "synthesis",
+      "passed": false,
+      "notes": [
+        "0/3 terms matched"
+      ],
+      "wall_ms": 8148.481607437134,
+      "ttft_ms": 39.698945,
+      "eval_count": 300
+    },
+    {
+      "case_id": "syn-summarize-news",
+      "kind": "synthesis",
+      "passed": true,
+      "notes": [
+        "2/2 terms matched"
+      ],
+      "wall_ms": 6201.076507568359,
+      "ttft_ms": 44.499584,
+      "eval_count": 228
+    },
+    {
+      "case_id": "syn-compare",
+      "kind": "synthesis",
+      "passed": false,
+      "notes": [
+        "0/3 terms matched"
+      ],
+      "wall_ms": 8140.800952911377,
+      "ttft_ms": 43.115424,
+      "eval_count": 300
+    },
+    {
+      "case_id": "syn-define",
+      "kind": "synthesis",
+      "passed": false,
+      "notes": [
+        "0/2 terms matched"
+      ],
+      "wall_ms": 8155.59720993042,
+      "ttft_ms": 41.156219,
+      "eval_count": 300
+    },
+    {
+      "case_id": "syn-reason",
+      "kind": "synthesis",
+      "passed": false,
+      "notes": [
+        "0/4 terms matched"
+      ],
+      "wall_ms": 8119.324445724487,
+      "ttft_ms": 42.518449,
+      "eval_count": 300
+    },
+    {
+      "case_id": "code-bash-du",
+      "kind": "coding",
+      "passed": false,
+      "notes": [
+        "0/4 terms matched"
+      ],
+      "wall_ms": 8104.960680007935,
+      "ttft_ms": 40.469355,
+      "eval_count": 300
+    },
+    {
+      "case_id": "code-python-sqlite",
+      "kind": "coding",
+      "passed": false,
+      "notes": [
+        "0/3 terms matched"
+      ],
+      "wall_ms": 8081.695318222046,
+      "ttft_ms": 39.740976,
+      "eval_count": 300
+    },
+    {
+      "case_id": "code-curl-json",
+      "kind": "coding",
+      "passed": false,
+      "notes": [
+        "0/3 terms matched"
+      ],
+      "wall_ms": 8050.940752029419,
+      "ttft_ms": 39.663496,
+      "eval_count": 300
+    },
+    {
+      "case_id": "ctx-count-word",
+      "kind": "long_ctx",
+      "passed": true,
+      "notes": [
+        "1/1 terms matched"
+      ],
+      "wall_ms": 4337.117910385132,
+      "ttft_ms": 63.388445,
+      "eval_count": 159
+    },
+    {
+      "case_id": "ctx-find-info",
+      "kind": "long_ctx",
+      "passed": true,
+      "notes": [
+        "1/1 terms matched"
+      ],
+      "wall_ms": 4078.4146785736084,
+      "ttft_ms": 50.138911,
+      "eval_count": 149
+    },
+    {
+      "case_id": "wa-greet",
+      "kind": "whatsapp",
+      "passed": true,
+      "notes": [
+        "free-text len=38"
+      ],
+      "wall_ms": 2917.064905166626,
+      "ttft_ms": 47.992123,
+      "eval_count": 105
+    },
+    {
+      "case_id": "wa-intent-news",
+      "kind": "whatsapp",
+      "passed": false,
+      "notes": [
+        "no tool_call emitted"
+      ],
+      "wall_ms": 8141.304492950439,
+      "ttft_ms": 86.313021,
+      "eval_count": 300
+    }
+  ]
+}

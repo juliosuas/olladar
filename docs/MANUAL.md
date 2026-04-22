@@ -128,7 +128,13 @@ One row per HTTP request, created on request arrival and finalized on response e
 
 ### `traces`
 
-Full bodies for analysis and potential fine-tuning dataset export. Skipped when `messages` serializes to > 200 KB.
+> ⚠️ **The `traces` table contains the full text of every prompt sent through olladar,** including anything users paste (API keys, credentials, PII, internal docs). On a shared machine, encrypted backup, or repurposed disk, this is a real disclosure surface. If this is a concern:
+>
+> - **Purge logs older than 7 days:** `sqlite3 ~/.local/share/olladar/logs.sqlite "DELETE FROM traces WHERE ts < strftime('%s','now')*1000 - 7*86400*1000"`
+> - **Disable trace storage entirely:** edit `~/.local/bin/olladar-proxy.mjs` and comment out the `insertTrace.run(...)` block. Keeps `calls` (metrics only) intact.
+> - **Delete everything:** `./uninstall.sh --purge`
+
+Full bodies for analysis and potential fine-tuning dataset export. Skipped when `messages` serializes to > 500 KB (a sentinel row records the skip reason).
 
 | Column | Type | Notes |
 |---|---|---|

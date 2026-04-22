@@ -15,13 +15,12 @@ import argparse, json, sys, time, urllib.request, datetime, os, re
 
 # Minimal YAML parser — only supports the flat structure of eval-cases.yaml
 def parse_eval_yaml(path):
-    import yaml
     try:
-        return yaml.safe_load(open(path))
+        import yaml
     except ImportError:
-        # fall back: hand-parse (limited)
-        pass
-    return None
+        print("ERROR: PyYAML required. Install: pip install --user pyyaml", file=sys.stderr)
+        sys.exit(2)
+    return yaml.safe_load(open(path))
 
 def call_ollama(model, prompt, tools=None, max_tokens=300, endpoint="http://127.0.0.1:11435"):
     body = {
@@ -78,7 +77,7 @@ def call_ollama(model, prompt, tools=None, max_tokens=300, endpoint="http://127.
     msg = resp.get("message", {})
     return {
         "wall_ms": (t1 - t0) * 1000,
-        "ttft_ms": resp.get("prompt_eval_duration", 0) / 1e6,
+        "prompt_eval_ms": resp.get("prompt_eval_duration", 0) / 1e6  # note: not TTFT — non-streaming API, this is prompt-processing time,
         "content": msg.get("content", "") or "",
         "tool_calls": msg.get("tool_calls") or [],
         "eval_count": resp.get("eval_count", 0),
@@ -139,8 +138,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="qwen3:32b")
     ap.add_argument("--endpoint", default="http://127.0.0.1:11435")
-    ap.add_argument("--cases", default=os.path.expanduser("~/Desktop/llm-eval/eval-cases.yaml"))
-    ap.add_argument("--out", default=os.path.expanduser("~/Desktop/llm-eval/results"))
+    HERE = os.path.dirname(os.path.abspath(__file__))
+    ap.add_argument("--cases", default=os.path.join(HERE, "eval-cases.yaml"))
+    ap.add_argument("--out", default=os.path.join(HERE, "..", "results"))
     args = ap.parse_args()
 
     cfg = parse_eval_yaml(args.cases)
@@ -157,7 +157,7 @@ def main():
         res = call_ollama(args.model, c["prompt"], tools=tools, endpoint=args.endpoint)
         score = score_case(c, res)
         score["wall_ms"] = res.get("wall_ms", 0)
-        score["ttft_ms"] = res.get("ttft_ms", 0)
+        score["prompt_eval_ms"] = res.get("prompt_eval_ms", 0)
         score["eval_count"] = res.get("eval_count", 0)
         results.append(score)
         status = "✓" if score["passed"] else "✗"
