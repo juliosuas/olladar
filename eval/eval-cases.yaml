@@ -1,0 +1,145 @@
+# llm-eval cases — curated 20 real-world OpenClaw-style prompts.
+# Structure: kind, prompt, optional tools, optional expected_tool, optional expected_contains
+#
+# Categories:
+#   tool_use (8):  should emit a tool call when tools[] present
+#   synthesis (5): text response, quality judged by LLM-as-judge
+#   coding (3):    code generation, judged by syntax/runability
+#   long_ctx (2):  sessions with 10+ turns
+#   whatsapp (2):  parsing short mobile message intents
+
+cases:
+  # ---- tool-use decisions ----
+  - id: tu-browse-hn
+    kind: tool_use
+    prompt: "Abre https://news.ycombinator.com"
+    tools: [browser_open, shell_run, answer]
+    expected_tool: browser_open
+    expected_args_contains: ["news.ycombinator"]
+
+  - id: tu-list-procs
+    kind: tool_use
+    prompt: "Lista los 5 procesos que consumen más RAM"
+    tools: [browser_open, shell_run, answer]
+    expected_tool: shell_run
+    expected_args_contains: ["ps", "mem"]
+
+  - id: tu-public-ip
+    kind: tool_use
+    prompt: "Busca mi IP pública con curl"
+    tools: [browser_open, shell_run, answer]
+    expected_tool: shell_run
+    expected_args_contains: ["curl", "ifconfig"]
+
+  - id: tu-fetch-docs
+    kind: tool_use
+    prompt: "Ve a https://httpbin.org/headers y dime mi User-Agent"
+    tools: [browser_open, web_fetch, answer]
+    expected_tool: [browser_open, web_fetch]
+    expected_args_contains: ["httpbin"]
+
+  - id: tu-simple-answer
+    kind: tool_use
+    prompt: "¿Qué es un firewall? Explica en una frase."
+    tools: [browser_open, shell_run, answer]
+    expected_tool: answer
+    expected_args_contains: []
+
+  - id: tu-disk-usage
+    kind: tool_use
+    prompt: "Cuánto disco estoy usando en /home"
+    tools: [browser_open, shell_run, answer]
+    expected_tool: shell_run
+    expected_args_contains: ["du", "-h"]
+
+  - id: tu-github-trending
+    kind: tool_use
+    prompt: "Abre github trending y trae los top 3"
+    tools: [browser_open, shell_run, answer]
+    expected_tool: browser_open
+    expected_args_contains: ["github.com/trending"]
+
+  - id: tu-weather
+    kind: tool_use
+    prompt: "Qué clima hace en Monterrey hoy"
+    tools: [browser_open, web_fetch, answer]
+    expected_tool: [web_fetch, browser_open]
+    expected_args_contains: ["monterrey", "weather", "wttr"]
+
+  # ---- synthesis ----
+  - id: syn-explain-rag
+    kind: synthesis
+    prompt: "Explica en 3 bullets qué es RAG y cuándo usarlo."
+    expected_contains: ["retrieval", "documento", "contexto"]
+
+  - id: syn-summarize-news
+    kind: synthesis
+    prompt: |
+      Resume en 2 frases el siguiente texto:
+
+      Ollama is an open-source project that lets developers run large language models locally.
+      It supports multiple model formats including GGUF and has a simple CLI and HTTP API.
+    expected_contains: ["ollama", "local"]
+
+  - id: syn-compare
+    kind: synthesis
+    prompt: "Compara qwen3:32b vs qwen2.5-coder:7b para tareas de automatización de navegador."
+    expected_contains: ["tool", "código", "latencia"]
+
+  - id: syn-define
+    kind: synthesis
+    prompt: "Qué significa 'context window' en un LLM, en una frase."
+    expected_contains: ["tokens", "contexto"]
+
+  - id: syn-reason
+    kind: synthesis
+    prompt: "Si tengo 24 GB VRAM y un modelo de 20 GB + KV cache de 3 GB, ¿cabe? Explica."
+    expected_contains: ["23", "cabe", "sí", "si"]
+
+  # ---- coding ----
+  - id: code-bash-du
+    kind: coding
+    prompt: "Escribe un bash one-liner que liste las 5 carpetas más grandes bajo /home."
+    expected_contains: ["du", "-h", "sort", "head"]
+
+  - id: code-python-sqlite
+    kind: coding
+    prompt: "Python para contar filas en la tabla 'calls' de logs.sqlite."
+    expected_contains: ["sqlite3", "COUNT", "connect"]
+
+  - id: code-curl-json
+    kind: coding
+    prompt: "curl a http://api.example/data y parseo de .users[0].name con jq."
+    expected_contains: ["curl", "jq", "users"]
+
+  # ---- long context ----
+  - id: ctx-count-word
+    kind: long_ctx
+    prompt: |
+      Este es un historial largo. Voy a repetir la palabra 'foo' 30 veces:
+      foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo foo
+      Otros contenidos: lorem ipsum dolor sit amet consectetur adipiscing elit. Proin fermentum tristique velit non blandit. Aliquam erat volutpat. Ut imperdiet erat at leo elementum.
+      ¿Cuántas veces apareció 'foo'?
+    expected_contains: ["30"]
+
+  - id: ctx-find-info
+    kind: long_ctx
+    prompt: |
+      Texto 1: Juan compró 3 manzanas a $5 cada una.
+      Texto 2: María vendió 7 peras a $3 cada una.
+      Texto 3: Pedro tiene 2 limones a $2 cada uno.
+      ¿Cuánto gastó Juan en total? Responde solo con el número.
+    expected_contains: ["15"]
+
+  # ---- whatsapp intents ----
+  - id: wa-greet
+    kind: whatsapp
+    prompt: "hola buen dia"
+    expected_contains: ["hola", "buen", "día"]
+
+  - id: wa-intent-news
+    kind: whatsapp
+    prompt: "dame las noticias de hoy porfa"
+    tools: [browser_open, answer]
+    expected_tool: browser_open
+    expected_args_contains: ["news", "noticias"]

@@ -1,0 +1,223 @@
+#!/usr/bin/env bash
+# olladar — CLI over ~/.local/share/olladar/logs.sqlite
+set -euo pipefail
+
+DB="${HOME}/.local/share/olladar/logs.sqlite"
+
+if [ ! -f "$DB" ]; then
+  echo "No DB yet at $DB — start olladar-proxy.service first"
+  exit 1
+fi
+
+usage() {
+  cat <<EOF
+olladar — LLM observability over $DB
+
+Usage:
+  olladar last [N]              show the N most recent calls (default 20)
+  olladar slow [N]              show the N slowest calls (default 20)
+  olladar failures [N]          show calls with errors/500s/no response (default 20)
+  olladar stats [--since DUR]   aggregate stats (DUR: 1h, 24h, 7d, default 24h)
+  olladar tools [--since DUR]   tool-use accuracy per model
+  olladar trace <request_id>    full messages/tools/response for one call
+  olladar size                  DB size + row counts
+  olladar watch                 live tail of all calls (Ctrl-C to stop)
+  olladar stream "<prompt>"     send prompt with live tok/s counter
+EOF
+}
+
+# python3 is used for safe sql + json output
+pyq() { python3 -c "
+import sqlite3, json, sys, datetime
+db = sqlite3.connect('$DB')
+db.row_factory = sqlite3.Row
+c = db.execute('''$1''', [$2])
+rows = [dict(r) for r in c.fetchall()]
+print(json.dumps(rows, indent=2, default=str))
+"; }
+
+parse_since() {
+  case "$1" in
+    *h) echo $(( ${1%h} * 3600000 )) ;;
+    *d) echo $(( ${1%d} * 86400000 )) ;;
+    *m) echo $(( ${1%m} * 60000 )) ;;
+    *) echo 86400000 ;;
+  esac
+}
+
+cmd="${1:-}"; shift || true
+
+case "$cmd" in
+  last)
+    n="${1:-20}"
+    python3 - "$DB" "$n" <<'PY'
+import sqlite3, sys, datetime
+db = sqlite3.connect(sys.argv[1])
+rows = db.execute("""
+  SELECT request_id, ts, model_served, had_tools, tool_call_emitted, ttft_ms, total_ms,
+         prompt_tokens, completion_tokens, status_code, error
+  FROM calls ORDER BY ts DESC LIMIT ?""", (int(sys.argv[2]),)).fetchall()
+print(f"{'timestamp':<20} {'model':<25} {'tools':>5} {'tool?':>5} {'ttft':>8} {'total':>8} {'in/out':>12} {'status':>6}")
+for r in rows:
+    ts = datetime.datetime.fromtimestamp(r[1]/1000).strftime('%m-%d %H:%M:%S')
+    print(f"{ts:<20} {str(r[2])[:25]:<25} {r[3]:>5} {r[4]:>5} {(str(round(r[5],0))+'ms' if r[5] else '-'):>8} {(str(round(r[6],0))+'ms' if r[6] else '-'):>8} {str(r[7] or '-')+'/'+str(r[8] or '-'):>12} {r[9] or '-':>6}")
+PY
+    ;;
+  slow)
+    n="${1:-20}"
+    python3 - "$DB" "$n" <<'PY'
+import sqlite3, sys, datetime
+db = sqlite3.connect(sys.argv[1])
+rows = db.execute("""
+  SELECT request_id, ts, model_served, had_tools, ttft_ms, total_ms, prompt_tokens, completion_tokens
+  FROM calls WHERE total_ms IS NOT NULL ORDER BY total_ms DESC LIMIT ?""", (int(sys.argv[2]),)).fetchall()
+print(f"{'timestamp':<20} {'model':<25} {'ttft':>8} {'total':>8} {'tokens in/out':>14}")
+for r in rows:
+    ts = datetime.datetime.fromtimestamp(r[1]/1000).strftime('%m-%d %H:%M:%S')
+    print(f"{ts:<20} {str(r[2])[:25]:<25} {round(r[4] or 0,0):>7.0f}ms {round(r[5] or 0,0):>7.0f}ms {str(r[6] or '-')+'/'+str(r[7] or '-'):>14}")
+PY
+    ;;
+  failures)
+    n="${1:-20}"
+    python3 - "$DB" "$n" <<'PY'
+import sqlite3, sys, datetime
+db = sqlite3.connect(sys.argv[1])
+rows = db.execute("""
+  SELECT ts, model_served, had_tools, tool_call_emitted, status_code, error, total_ms
+  FROM calls
+  WHERE status_code >= 400 OR error IS NOT NULL
+     OR (had_tools=1 AND tool_call_emitted=0)
+  ORDER BY ts DESC LIMIT ?""", (int(sys.argv[2]),)).fetchall()
+print(f"{'timestamp':<20} {'model':<22} {'status':>6} {'tool?':>6} error")
+for r in rows:
+    ts = datetime.datetime.fromtimestamp(r[0]/1000).strftime('%m-%d %H:%M:%S')
+    reason = r[5] or ("tool_missed" if r[2]==1 and r[3]==0 else "-")
+    print(f"{ts:<20} {str(r[1])[:22]:<22} {r[4] or '-':>6} {r[3]:>6} {reason}")
+PY
+    ;;
+  stats)
+    since_spec="${2:-24h}"
+    if [ "${1:-}" = "--since" ]; then since_spec="$2"; fi
+    since_ms=$(parse_since "$since_spec")
+    python3 - "$DB" "$since_ms" "$since_spec" <<'PY'
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+cutoff_ms = int(sys.argv[2])
+label = sys.argv[3]
+row = db.execute("SELECT strftime('%s','now')*1000").fetchone()[0]
+cutoff = row - cutoff_ms
+total = db.execute("SELECT COUNT(*) FROM calls WHERE ts >= ?", (cutoff,)).fetchone()[0]
+if total == 0:
+    print(f"No calls in last {label}"); sys.exit(0)
+print(f"=== olladar stats (last {label}) ===")
+print(f"Total calls: {total}")
+models = db.execute("""SELECT model_served, COUNT(*) AS n FROM calls WHERE ts>=? GROUP BY model_served ORDER BY n DESC""", (cutoff,)).fetchall()
+for model, n in models:
+    ttfts = [r[0] for r in db.execute("SELECT ttft_ms FROM calls WHERE model_served IS ? AND ts>=? AND ttft_ms IS NOT NULL ORDER BY ttft_ms", (model, cutoff))]
+    totals = [r[0] for r in db.execute("SELECT total_ms FROM calls WHERE model_served IS ? AND ts>=? AND total_ms IS NOT NULL ORDER BY total_ms", (model, cutoff))]
+    row = db.execute("SELECT AVG(prompt_tokens), AVG(completion_tokens) FROM calls WHERE model_served IS ? AND ts>=?", (model, cutoff)).fetchone()
+    avg_prompt = row[0] or 0; avg_comp = row[1] or 0
+    p50_ttft = ttfts[len(ttfts)//2] if ttfts else 0
+    p50_total = totals[len(totals)//2] if totals else 0
+    p95_total = totals[int(len(totals)*0.95)] if totals else 0
+    print(f"  {(model or '(null)'):<30} n={n:<4} p50_ttft={p50_ttft:>5.0f}ms  p50_total={p50_total:>6.0f}ms  p95_total={p95_total:>6.0f}ms  avg_in={avg_prompt:>4.0f}  avg_out={avg_comp:>4.0f}")
+
+tools_total = db.execute("SELECT COUNT(*) FROM calls WHERE had_tools=1 AND ts>=?", (cutoff,)).fetchone()[0]
+tools_emitted = db.execute("SELECT COUNT(*) FROM calls WHERE had_tools=1 AND tool_call_emitted=1 AND ts>=?", (cutoff,)).fetchone()[0]
+if tools_total > 0:
+    rate = round(100*tools_emitted/tools_total, 1)
+    print(f"\nTool-use: {tools_emitted}/{tools_total} emitted ({rate}%)")
+
+errors = db.execute("SELECT COUNT(*) FROM calls WHERE (status_code >= 400 OR error IS NOT NULL) AND ts>=?", (cutoff,)).fetchone()[0]
+print(f"Errors:   {errors}")
+PY
+    ;;
+  tools)
+    since_spec="${2:-24h}"
+    if [ "${1:-}" = "--since" ]; then since_spec="$2"; fi
+    since_ms=$(parse_since "$since_spec")
+    python3 - "$DB" "$since_ms" "$since_spec" <<'PY'
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+cutoff_ms = int(sys.argv[2])
+row = db.execute("SELECT strftime('%s','now')*1000").fetchone()[0]
+cutoff = row - cutoff_ms
+print(f"=== Tool-use accuracy (last {sys.argv[3]}) ===")
+print(f"{'model':<30} {'tool_reqs':>10} {'emitted':>10} {'rate':>8}")
+for model, total, emitted in db.execute("""
+  SELECT model_served, COUNT(*), SUM(tool_call_emitted) FROM calls
+  WHERE had_tools=1 AND ts >= ? GROUP BY model_served ORDER BY COUNT(*) DESC""", (cutoff,)):
+    rate = round(100*(emitted or 0)/total, 1) if total else 0
+    print(f"{model or '(null)':<30} {total:>10} {emitted or 0:>10} {rate:>7}%")
+PY
+    ;;
+  trace)
+    rid="${1:-}"
+    [ -z "$rid" ] && { echo "need request_id"; exit 1; }
+    python3 - "$DB" "$rid" <<'PY'
+import sqlite3, sys, json
+db = sqlite3.connect(sys.argv[1])
+db.row_factory = sqlite3.Row
+c = db.execute("""SELECT c.*, t.messages_json, t.tools_json, t.response_json FROM calls c
+  LEFT JOIN traces t USING(request_id) WHERE c.request_id = ?""", (sys.argv[2],)).fetchone()
+if not c: print("not found"); sys.exit(1)
+d = dict(c)
+for k in ('messages_json','tools_json','response_json'):
+    if d.get(k):
+        try: d[k] = json.loads(d[k])
+        except: pass
+print(json.dumps(d, indent=2, default=str))
+PY
+    ;;
+  size)
+    python3 - "$DB" <<'PY'
+import sqlite3, os, sys
+db = sqlite3.connect(sys.argv[1])
+sz = os.path.getsize(sys.argv[1]) / (1024*1024)
+print(f"DB: {sys.argv[1]}  ({sz:.1f} MB)")
+for t in ('calls','traces'):
+    n = db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+    print(f"  {t}: {n} rows")
+PY
+    ;;
+  watch)
+    python3 - "$DB" <<'PY'
+import sqlite3, sys, time, datetime
+db_path = sys.argv[1]
+last_ts = int(time.time()*1000) - 5000  # start 5s in the past
+GREEN="\033[32m"; DIM="\033[2m"; RED="\033[31m"; CYAN="\033[36m"; RESET="\033[0m"; BOLD="\033[1m"
+print(f"{BOLD}watching {db_path} — Ctrl-C to stop{RESET}", file=sys.stderr)
+print(f"{'time':<10} {'model':<22} {'had_t':>5} {'tool':>5} {'ttft':>7} {'total':>8} {'in/out':>10} {'tok/s':>7} {'st':>3}", file=sys.stderr)
+try:
+    while True:
+        db = sqlite3.connect(db_path)
+        rows = db.execute("""
+            SELECT ts, model_served, had_tools, tool_call_emitted, ttft_ms, total_ms,
+                   prompt_tokens, completion_tokens, status_code, error
+            FROM calls WHERE ts > ? AND total_ms IS NOT NULL ORDER BY ts""", (last_ts,)).fetchall()
+        for r in rows:
+            ts = datetime.datetime.fromtimestamp(r[0]/1000).strftime("%H:%M:%S")
+            model = (r[1] or "(null)")[:22]
+            t_col = GREEN if (r[2]==1 and r[3]==1) else (RED if r[2]==1 else DIM)
+            s_col = RED if (r[8] and r[8]>=400) else ""
+            ttft = f"{r[4]:.0f}ms" if r[4] else "-"
+            total = f"{r[5]:.0f}ms" if r[5] else "-"
+            inout = f"{r[6] or '-'}/{r[7] or '-'}"
+            tps = ""
+            if r[7] and r[5] and r[4] and r[5] > r[4]:
+                tps_v = r[7] * 1000 / (r[5] - r[4])
+                tps = f"{CYAN}{tps_v:.0f}{RESET}"
+            print(f"{ts:<10} {model:<22} {r[2]:>5} {t_col}{r[3]:>5}{RESET} {ttft:>7} {total:>8} {inout:>10} {tps:>14} {s_col}{r[8] or '-':>3}{RESET}")
+            last_ts = r[0]
+        db.close()
+        time.sleep(1)
+except KeyboardInterrupt:
+    print(file=sys.stderr)
+PY
+    ;;
+  stream)
+    exec /home/ludwig/.local/bin/olladar-stream "$@"
+    ;;
+  ""|-h|--help|help) usage ;;
+  *) echo "unknown: $cmd"; usage; exit 1 ;;
+esac

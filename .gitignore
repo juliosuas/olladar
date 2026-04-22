@@ -1,0 +1,22 @@
+# state
+*.sqlite
+*.sqlite-*
+logs/
+results/
+.cache/
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# node (if ever added)
+node_modules/
+.npmrc

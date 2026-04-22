@@ -1,0 +1,18 @@
+[Unit]
+Description=olladar proxy — transparent observability and tool-use acceleration for ollama
+Documentation=https://github.com/juliosuas/olladar
+After=network-online.target
+
+[Service]
+Type=simple
+# OLLADAR_NODE is set by install.sh to the absolute node binary path (requires Node 22.5+).
+# Falls back to `node` in PATH if unset.
+Environment="OLLADAR_NODE=node"
+ExecStart=/bin/sh -c '"$OLLADAR_NODE" --experimental-sqlite %h/.local/bin/olladar-proxy.mjs'
+Restart=on-failure
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
